@@ -97,6 +97,39 @@ async function getNews(): Promise<string> {
   }
 }
 
+async function getWikipediaSummary(query: string): Promise<string | null> {
+    try {
+        const searchUrl = `https://en.wikipedia.org/w/api.php?action=query&list=search&srsearch=${encodeURIComponent(query)}&format=json&origin=*`;
+        const searchResponse = await fetch(searchUrl);
+        if (!searchResponse.ok) throw new Error('Wikipedia search failed');
+        const searchData = await searchResponse.json();
+
+        if (!searchData.query.search || searchData.query.search.length === 0) {
+            return null;
+        }
+
+        const pageTitle = searchData.query.search[0].title;
+        
+        const pageUrl = `https://en.wikipedia.org/w/api.php?action=query&prop=extracts&exintro&explaintext&titles=${encodeURIComponent(pageTitle)}&format=json&origin=*`;
+        const pageResponse = await fetch(pageUrl);
+        if (!pageResponse.ok) throw new Error('Wikipedia page fetch failed');
+        const pageData = await pageResponse.json();
+        
+        const pages = pageData.query.pages;
+        const pageId = Object.keys(pages)[0];
+        const extract = pages[pageId].extract;
+
+        // Return the first 2-3 sentences.
+        if (extract) {
+            return extract.split('. ').slice(0, 2).join('. ') + '.';
+        }
+
+        return null;
+    } catch (error) {
+        console.error('Wikipedia API failed:', error);
+        return null;
+    }
+}
 
 export async function sendMessage(
   message: string,
@@ -166,12 +199,23 @@ export async function sendMessage(
     // 4. Web Research Fallback
     try {
       const result = await fallbackToWebResearch({ query: message });
-      if (result.answer) {
+      if (result.answer && !/provided context does not contain/i.test(result.answer)) {
         return { assistantResponse: result.answer };
       }
     } catch (e) {
       console.error('Web research flow failed:', e);
     }
+
+    // 5. Final Fallback: Wikipedia
+    try {
+        const wikiSummary = await getWikipediaSummary(message);
+        if (wikiSummary) {
+            return { assistantResponse: wikiSummary };
+        }
+    } catch (e) {
+        console.error('Wikipedia fallback failed:', e);
+    }
+
 
     return {
       assistantResponse:
