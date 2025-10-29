@@ -6,7 +6,7 @@ import { Input } from '@/components/ui/input';
 import { sendMessage } from '@/app/actions';
 import { useToast } from '@/hooks/use-toast';
 import { type Message } from '@/lib/types';
-import { ArrowUp, HelpCircle, Bot, FileText, BrainCircuit } from 'lucide-react';
+import { ArrowUp, HelpCircle, Bot, FileText, BrainCircuit, Cloud, Newspaper } from 'lucide-react';
 
 interface ChatInputProps {
   messages: Message[];
@@ -34,6 +34,14 @@ const examplePrompts = [
     {
       icon: <FileText size={16} />,
       text: 'Give me a random math fact',
+    },
+    {
+      icon: <Cloud size={16} />,
+      text: 'What\'s the weather in London?',
+    },
+    {
+      icon: <Newspaper size={16} />,
+      text: 'Show me the latest tech news',
     },
 ];
 

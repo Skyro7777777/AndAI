@@ -54,6 +54,49 @@ async function getTrivia(): Promise<string> {
     }
 }
 
+async function getWeather(city: string = 'New York'): Promise<string> {
+    try {
+        // First get lat/long for the city
+        const geoResponse = await fetch(`https://geocoding-api.open-meteo.com/v1/search?name=${city}&count=1`);
+        if (!geoResponse.ok) throw new Error(`Failed to get location for ${city}`);
+        const geoData = await geoResponse.json();
+        if (!geoData.results || geoData.results.length === 0) return `Sorry, I couldn't find a location named ${city}.`;
+
+        const { latitude, longitude, name, admin1, country } = geoData.results[0];
+
+        const weatherResponse = await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${latitude}&longitude=${longitude}&current_weather=true`);
+        if (!weatherResponse.ok) throw new Error('Failed to fetch weather');
+        const weatherData = await weatherResponse.json();
+        
+        const { temperature, windspeed, weathercode } = weatherData.current_weather;
+        return `The current weather in ${name}, ${admin1 || country} is:\n- Temperature: ${temperature}°C\n- Wind Speed: ${windspeed} km/h`;
+    } catch (error) {
+        console.error('Weather API failed:', error);
+        return "Sorry, I couldn't get the weather right now. The forecast might be cloudy.";
+    }
+}
+
+async function getNews(): Promise<string> {
+  try {
+    const storyIdsResponse = await fetch('https://hacker-news.firebaseio.com/v0/topstories.json', { cache: 'no-store' });
+    if (!storyIdsResponse.ok) throw new Error('Failed to fetch top stories');
+    const storyIds = await storyIdsResponse.json();
+    
+    const topFiveIds = storyIds.slice(0, 5);
+    const storyPromises = topFiveIds.map((id: number) => 
+        fetch(`https://hacker-news.firebaseio.com/v0/item/${id}.json`).then(res => res.json())
+    );
+    
+    const stories = await Promise.all(storyPromises);
+    const headlines = stories.map((story, index) => `${index + 1}. ${story.title}`);
+    
+    return `Here are the top 5 headlines from Hacker News:\n\n${headlines.join('\n')}`;
+  } catch (error) {
+    console.error('Hacker News API failed:', error);
+    return "I couldn't fetch the latest news headlines. The wire might be down!";
+  }
+}
+
 
 export async function sendMessage(
   message: string,
@@ -76,6 +119,17 @@ export async function sendMessage(
       const trivia = await getTrivia();
       return { assistantResponse: trivia };
     }
+    if (lowerCaseMessage.includes('weather') || lowerCaseMessage.includes('forecast')) {
+      const cityMatch = message.match(/(in|for)\s+([A-Za-z\s]+)/);
+      const city = cityMatch ? cityMatch[2].trim() : 'New York';
+      const weather = await getWeather(city);
+      return { assistantResponse: weather };
+    }
+    if (lowerCaseMessage.includes('news') || lowerCaseMessage.includes('headlines')) {
+      const news = await getNews();
+      return { assistantResponse: news };
+    }
+
 
     // 2. Story-Based Q&A
     if (story.trim().length > 0) {
