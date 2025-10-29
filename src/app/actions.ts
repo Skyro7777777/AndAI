@@ -3,6 +3,7 @@
 import { answerQuestionsFromCoQA } from '@/ai/flows/answer-questions-from-coqa';
 import { answerQuestionsFromUserStory } from '@/ai/flows/answer-questions-from-user-story';
 import { fallbackToWebResearch } from '@/ai/flows/fallback-to-web-research';
+import { chitChat } from '@/ai/flows/chit-chat';
 import type { Message } from '@/lib/types';
 
 // The context for the CoQA-based Q&A about the assistant itself.
@@ -63,21 +64,7 @@ export async function sendMessage(
   const lowerCaseMessage = message.toLowerCase();
 
   try {
-    // 1. Chit-chat
-    if (/\b(hello|hi|hey)\b/.test(lowerCaseMessage)) {
-      return { assistantResponse: 'Hello there! How can I help you today?' };
-    }
-    if (lowerCaseMessage.includes('how are you')) {
-      return {
-        assistantResponse:
-          "I'm just a bunch of code, but I'm doing great! Thanks for asking.",
-      };
-    }
-    if (/\b(bye|goodbye)\b/.test(lowerCaseMessage)) {
-        return { assistantResponse: 'Goodbye! Have a great day.' };
-    }
-
-    // 2. API Integrations
+    // 1. API Integrations for specific keywords
     if (lowerCaseMessage.includes('joke')) {
       const joke = await getJoke();
       return { assistantResponse: joke };
@@ -91,23 +78,27 @@ export async function sendMessage(
       return { assistantResponse: trivia };
     }
 
-    // 3. Story-Based Q&A
+    // 2. Story-Based Q&A
     if (story.trim().length > 0) {
       try {
         const result = await answerQuestionsFromUserStory({
           story,
           question: message,
         });
+        // If the model is confident, it will answer. If not, it might say "I don't know".
+        // We check for that to decide if we should proceed.
         if (result.answer && !/i (don't know|cannot answer)/i.test(result.answer)) {
           return { assistantResponse: result.answer };
         }
       } catch (e) {
         console.error('Story Q&A flow failed:', e);
+        // Don't return, allow fallback to other methods.
       }
     }
 
-    // 4. CoQA Dataset Q&A (about the assistant)
-    try {
+    // 3. CoQA Dataset Q&A (about the assistant itself)
+    // This is for questions like "What is AndAI?"
+     try {
       const result = await answerQuestionsFromCoQA({
         context: ASSISTANT_CONTEXT,
         question: message,
@@ -119,6 +110,16 @@ export async function sendMessage(
       console.error('CoQA Q&A flow failed:', e);
     }
     
+    // 4. General Chit-Chat and Knowledge using a powerful LLM
+    try {
+      const result = await chitChat({ query: message, history });
+      if (result.answer) {
+        return { assistantResponse: result.answer };
+      }
+    } catch (e) {
+      console.error('Chit-chat flow failed:', e);
+    }
+
     // 5. Web Research Fallback
     try {
       const result = await fallbackToWebResearch({ query: message });
