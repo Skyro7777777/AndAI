@@ -3,7 +3,6 @@
 import { answerQuestionsFromCoQA } from '@/ai/flows/answer-questions-from-coqa';
 import { answerQuestionsFromUserStory } from '@/ai/flows/answer-questions-from-user-story';
 import { fallbackToWebResearch } from '@/ai/flows/fallback-to-web-research';
-import { chitChat } from '@/ai/flows/chit-chat';
 import type { Message } from '@/lib/types';
 
 // The context for the CoQA-based Q&A about the assistant itself.
@@ -110,17 +109,7 @@ export async function sendMessage(
       console.error('CoQA Q&A flow failed:', e);
     }
     
-    // 4. General Chit-Chat and Knowledge using a powerful LLM
-    try {
-      const result = await chitChat({ query: message, history });
-      if (result.answer) {
-        return { assistantResponse: result.answer };
-      }
-    } catch (e) {
-      console.error('Chit-chat flow failed:', e);
-    }
-
-    // 5. Web Research Fallback
+    // 4. Web Research Fallback
     try {
       const result = await fallbackToWebResearch({ query: message });
       if (result.answer) {
