@@ -173,7 +173,7 @@ export async function sendMessage(
         });
         // If the model is confident, it will answer. If not, it might say "I don't know".
         // We check for that to decide if we should proceed.
-        if (result.answer && !/i (don't know|cannot answer)/i.test(result.answer)) {
+        if (result.answer && !/i (don't know|cannot answer)|context does not contain/i.test(result.answer)) {
           return { assistantResponse: result.answer };
         }
       } catch (e) {
@@ -189,7 +189,7 @@ export async function sendMessage(
         context: ASSISTANT_CONTEXT,
         question: message,
       });
-      if (result.answer && !/i (don't know|cannot answer)/i.test(result.answer)) {
+      if (result.answer && !/i (don't know|cannot answer)|context does not contain/i.test(result.answer)) {
         return { assistantResponse: result.answer };
       }
     } catch (e) {
